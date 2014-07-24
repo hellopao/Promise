@@ -1,72 +1,73 @@
-function isType(obj,type) {
-    return {}.toString.call(obj).toLowerCase().replace(/\[object (\w+)\]/,'$1') === type.toLowerCase();
+function isType(obj, type) {
+	return Object.prototype.toString.call(obj).toLowerCase().replace(/\[object (\w+)\]/, "$1") === type.toLowerCase();
 }
-
-
 function Promise() {
-    this.state = "pending";
-    this.thenQueue = [];
+	this.state = "pending";
+	this.handleQueue = [];
 }
 
-Promise.prototype.then = function (onFulfilled, onRejected) {
-    var thenObj = {};
-
-    if (isType(onFulfilled, 'function')) {
-        thenObj.fulfilled = onFulfilled;
+Promise.prototype.then = function(onFulfilled, onRejected) {
+	var handle = {};
+	if (isType(onFulfilled, "function")) {
+		handle.fulfilled = onFulfilled;
+    } else {
+        throw "the params of then must be function";
     }
 
-    if (isType(onRejected, 'function')) {
-        thenObj.rejected = onRejected;
-    }
+	if (isType(onRejected, "function")) {
+		handle.rejected = onRejected;
+	} 
 
-    this.thenQueue.push(thenObj);
+	this.handleQueue.push(handle);
 
-    return this;
+	return this;
 };
 
-Promise.prototype.resolve = function (data) {
+Promise.prototype.resolve = function(value) {
     if (this.state !== "pending") {
         return;
     }
 
-    var thenObj,fn, result;
-
-    while (thenObj = this.thenQueue.shift()) {
-        fn = thenObj.fulfilled;
-        result = fn && fn.call(null, data);
-        if (result && result.constructor === Promise) {
-            this.thenQueue.forEach(function (restThen) {
-                result.then(restThen.fulfilled, restThen.rejected);
-            });
-            return result;
-        } else {
-            data = result;
-        }
-    }
-    
+    this.state = "resolved";
+    this.handle('resolve',value);
 };
 
-Promise.prototype.reject = function (data) {
+Promise.prototype.reject = function(reason) {
     if (this.state !== "pending") {
         return;
     }
 
-    var thenObj, fn, result;
+    this.state = "rejected";
+    this.handle('resolve', reason);
+};
 
-    while (thenObj = this.thenQueue.shift()) {
-        fn = thenObj.rejected;
-        result = fn && fn.call(null, data);
-        if (result && result.constructor === Promise) {
-            this.thenQueue.forEach(function (restThen) {
-                result.then(restThen.fulfilled, restThen.rejected);
-            });
-            return result;
-        } else {
-            data = result;
+Promise.prototype.handle = function (type,value) {
+    var firstHandle;
+    var handleMap = {
+        "resolve": "fulfilled",
+        "reject":"rejected"
+    };
+
+    while (firstHandle = this.handleQueue.shift()) {
+        try {
+            var fn = firstHandle[handleMap[type]];
+            var result = fn && fn.call(null, value);
+
+            //返回的是一个promise，将后面所有的then挂到该promise后面。
+            if (result && result.constructor === Promise) {
+                this.handleQueue.forEach(function (handle) {
+                    result.then(handle.fulfilled, handle.rejected);
+                });
+                return result;
+            } else {
+                //返回的是一个值,就把该值传递给下一个fulfilled或者rejected作为参数
+                value = result;
+            }
+        } catch (e) {
+            firstHandle.rejected && firstHandle.rejected(e);
         }
     }
 };
-
 
 Promise.all = function (promises) {
     var resultPromise = new Promise();
@@ -74,7 +75,7 @@ Promise.all = function (promises) {
     var promiseCount = promises.length;
     var result = [];
 
-    promises.forEach(function (promise,index) {
+    promises.forEach(function (promise, index) {
         promise.then(function (data) {
             result[index] = data;
             promiseCount--;
@@ -98,11 +99,11 @@ Promise.promisify = function () {
         var fnArgs = [].slice.call(arguments);
 
         var promise = new Promise();
-        var handler = function (err,data) {
+        var handler = function (err, data) {
             if (err) {
                 promise.reject(err);
             } else {
-                promise.resolve(data);//[].slice.call(arguments, 1));
+                promise.resolve(data);
             }
         }
 
@@ -114,7 +115,4 @@ Promise.promisify = function () {
     }
 };
 
-
 module.exports = Promise;
-
-
