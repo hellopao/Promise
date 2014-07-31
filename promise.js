@@ -92,7 +92,7 @@ Promise.all = function (promises) {
 
 Promise.promisify = function () {
     //要promise化的方法
-    var fn = fn || [].slice.call(arguments).shift();
+    var fn = [].slice.call(arguments).shift();
 
     return function () {
         //要promise化的方法接收的参数
